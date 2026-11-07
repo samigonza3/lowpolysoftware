@@ -149,7 +149,7 @@ const SceneView: React.FC<{ scene: Scene; spec: VideoSpec; dur: number; assetBas
             gl={{ antialias: true, preserveDrawingBuffer: true }}
           >
             <KitProvider value={kit}>
-              <World scene={scene} characters={spec.characters} pal={spec.palette} style={spec.style} frame={frame} fps={fps} dur={dur} vertical={vertical} hook={first} />
+              <World scene={scene} characters={spec.characters} pal={spec.palette} style={spec.style} frame={frame} fps={fps} dur={dur} vertical={vertical} hook={first} assets={spec.assets} assetBase={assetBase} />
             </KitProvider>
           </ThreeCanvas>
         </KitProvider>

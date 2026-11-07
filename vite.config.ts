@@ -8,6 +8,7 @@ export default defineConfig({
     proxy: {
       "/api": "http://localhost:3210",
       "/files": "http://localhost:3210",
+      "/library": "http://localhost:3210",
     },
   },
 });

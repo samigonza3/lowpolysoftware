@@ -11,10 +11,13 @@ import { DATA_DIR, PORT, PROJECTS_DIR, ROOT } from "./paths";
 import { createProject, deleteProject, listProjects, loadProject, projectDir, saveProject, type Project } from "./projects";
 import { buildSrt, jobs, startRender, QUALITY } from "./render";
 import { carryAudio, reviewJobs, startReview } from "./review";
+import { LIBRARY_DIR, installAsset, installedLibrary, listLibrary, removeAsset, uploadAsset } from "./library";
+import { addReference, referenceInputs, removeReference } from "./references";
+import { withAssets } from "../shared/library";
 import { EMOTION_SPEED, installModel, listVoices, synthesize, voiceById, wavSeconds } from "./tts";
 
 const app = express();
-app.use(express.json({ limit: "5mb" }));
+app.use(express.json({ limit: "40mb" }));
 
 type H = (req: Request, res: Response) => Promise<unknown> | unknown;
 const h = (fn: H) => (req: Request, res: Response, next: NextFunction) =>
@@ -29,6 +32,25 @@ app.use(
   },
   express.static(PROJECTS_DIR, { fallthrough: false }),
 );
+
+app.use(
+  "/library",
+  (_req, res, next) => {
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    next();
+  },
+  express.static(LIBRARY_DIR, { fallthrough: false }),
+);
+
+/* ---------- biblioteca: texturas y cielos 360° ---------- */
+app.get("/api/library", h(() => listLibrary()));
+app.post("/api/library/upload", h((req) => uploadAsset(req.body)));
+app.post("/api/library/:id/install", h(async (req) => (await installAsset(req.params.id), { ok: true })));
+app.delete("/api/library/:id", h((req) => (removeAsset(req.params.id), { ok: true })));
+
+/* ---------- fotos de referencia ---------- */
+app.post("/api/projects/:id/references", h((req) => addReference(req.params.id, String(req.body.data ?? ""), String(req.body.note ?? ""))));
+app.delete("/api/projects/:id/references/:refId", h((req) => removeReference(req.params.id, req.params.refId)));
 
 /* ---------- estado ---------- */
 app.get("/api/status", h(() => ({
@@ -46,7 +68,7 @@ app.get("/api/projects/:id", h((req) => loadProject(req.params.id)));
 app.delete("/api/projects/:id", h((req) => (deleteProject(req.params.id), { ok: true })));
 app.put("/api/projects/:id", h((req) => {
   const p = loadProject(req.params.id);
-  const allowed: (keyof Project)[] = ["step", "style", "idea", "answers", "scriptMode", "userScript", "notes", "durationSec", "spec", "questions", "language", "voice"];
+  const allowed: (keyof Project)[] = ["step", "style", "idea", "answers", "scriptMode", "userScript", "notes", "durationSec", "spec", "questions", "language", "voice", "references"];
   for (const k of allowed) if (k in req.body) (p as unknown as Record<string, unknown>)[k] = req.body[k];
   if (p.spec) {
     p.spec.style = templateById(p.style).id;
@@ -63,7 +85,7 @@ app.post("/api/projects/:id/questions", h(async (req) => {
   const p = loadProject(req.params.id);
   if (req.body?.idea) p.idea = req.body.idea;
   if (!p.idea.trim()) throw Object.assign(new Error("Escribe primero la idea del video"), { status: 400 });
-  const q = await askQuestions(p.style, p.idea);
+  const q = await askQuestions(p.style, p.idea, { refs: referenceInputs(p) });
   p.questions = q.questions;
   return saveProject(p);
 }));
@@ -89,8 +111,8 @@ app.post("/api/projects/:id/script", h(async (req) => {
     style: p.style, idea: p.idea, language, mode: p.scriptMode, userScript: p.userScript, notes: p.notes, durationSec: p.durationSec,
     answers: Object.fromEntries(p.questions.map((q) => [q.question, p.answers[q.id] ?? ""])),
     aspect: p.spec?.aspect,
-  });
-  p.spec = defaultSpec(p, draft, p.spec);
+  }, { refs: referenceInputs(p), library: installedLibrary() });
+  p.spec = withAssets(defaultSpec(p, draft, p.spec), installedLibrary());
   return saveProject(p);
 }));
 
@@ -99,8 +121,13 @@ app.post("/api/projects/:id/revise", h(async (req) => {
   if (!p.spec) throw Object.assign(new Error("Aún no hay guion"), { status: 400 });
   const { version, style, aspect, fps, captions, language, voice, ...draft } = p.spec;
   void version; void style; void fps;
-  const updated = await reviseDraft(p.style, draft as Draft, String(req.body.instruction ?? ""), language, aspect);
-  p.spec = { ...defaultSpec(p, updated, p.spec), aspect, captions, language, voice, scenes: carryAudio(p.spec.scenes, updated.scenes) };
+  const updated = await reviseDraft(p.style, draft as Draft, String(req.body.instruction ?? ""), language, aspect, {
+    refs: referenceInputs(p), library: installedLibrary(),
+  });
+  p.spec = withAssets(
+    { ...defaultSpec(p, updated, p.spec), aspect, captions, language, voice, scenes: carryAudio(p.spec.scenes, updated.scenes) },
+    installedLibrary(),
+  );
   return saveProject(p);
 }));
 
@@ -164,7 +191,7 @@ app.post("/api/projects/:id/render", h((req) => {
   if (!p.spec) throw Object.assign(new Error("Aún no hay guion"), { status: 400 });
   const aspect = (req.body.aspect ?? p.spec.aspect) as Aspect;
   const quality = (req.body.quality in QUALITY ? req.body.quality : "hd") as keyof typeof QUALITY;
-  const spec: VideoSpec = { ...sanitizeSpec(p.spec), aspect };
+  const spec: VideoSpec = withAssets({ ...sanitizeSpec(p.spec), aspect }, installedLibrary());
   const job = startRender(p.id, spec, path.join(projectDir(p.id), "renders"), quality);
   return job;
 }));

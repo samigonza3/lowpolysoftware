@@ -22,6 +22,14 @@ export interface Project {
   voice: VoiceChoice;
   spec: VideoSpec | null;
   renders: { file: string; createdAt: string; aspect: string }[];
+  /** Fotos de referencia (lugares, objetos, personas, marca) que el agente mira al escribir el guion. */
+  references?: Reference[];
+}
+
+export interface Reference {
+  id: string;
+  url: string; // /files/<proyecto>/refs/<id>.jpg
+  note: string; // qué es: "mi perro Toby", "la fachada de mi tienda"…
 }
 
 const file = (id: string) => path.join(PROJECTS_DIR, safeId(id), "project.json");

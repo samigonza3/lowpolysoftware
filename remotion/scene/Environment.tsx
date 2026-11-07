@@ -12,6 +12,8 @@ interface EnvProps {
   fps: number;
   sceneId: string;
   wide: number;
+  /** Textura de la biblioteca para el suelo (opcional). */
+  groundTex?: THREE.Texture | null;
 }
 
 /** Color de cielo según hora del día y estilo. */
@@ -89,7 +91,7 @@ const Ring: React.FC<{ kind: string; n: number; pal: Palette; night: boolean; t:
   );
 };
 
-export const Environment: React.FC<EnvProps> = ({ setting, time, pal, frame, fps, sceneId, wide }) => {
+export const Environment: React.FC<EnvProps> = ({ setting, time, pal, frame, fps, sceneId, wide, groundTex }) => {
   const kit = useKit();
   const t = frame / fps;
   const night = time === "night" || kit.id === "neon";
@@ -100,7 +102,10 @@ export const Environment: React.FC<EnvProps> = ({ setting, time, pal, frame, fps
     setting === "space" ? null : (
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, -10]} receiveShadow={kit.shadows}>
         <planeGeometry args={[120, 60, kit.lowpoly ? 24 : 1, kit.lowpoly ? 12 : 1]} />
-        {kit.id === "flat2d" ? (
+        {groundTex ? (
+          // la textura manda; el color de la paleta la tiñe un poco para que combine con el estilo
+          <meshStandardMaterial map={groundTex} color={new THREE.Color(ground).lerp(new THREE.Color("#ffffff"), 0.6)} roughness={0.95} />
+        ) : kit.id === "flat2d" ? (
           <meshBasicMaterial color={ground} />
         ) : (
           <meshStandardMaterial color={ground} flatShading={kit.lowpoly} roughness={setting === "ocean" ? 0.25 : 1}

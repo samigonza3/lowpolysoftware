@@ -26,6 +26,15 @@ y escenas, y exportas un **MP4**.
 - **Revisión del director** (`server/review.ts`): el agente renderiza un fotograma por escena, los mira, califica el
   gancho y corrige el guion (hasta 2 rondas). Se ejecuta sola al generar el guion o con el botón.
 
+## Referencias, texturas y cielos 360°
+
+- **Fotos de referencia** (paso 2): sube hasta 6 fotos de lugares, objetos, personas, tu producto o tu marca y escribe
+  qué es cada una. El agente las mira al preguntar, al escribir el guion y en la revisión, y copia colores, formas y
+  ambiente usando las piezas del estilo.
+- **Biblioteca** (paso 4): texturas de suelo y cielos 360° (HDRI) de Poly Haven (CC0) que se instalan con un clic, o
+  tus propias texturas/panorámicas (JPG, PNG, HDR). El agente las usa donde combinan y puedes elegirlas por escena.
+  Se guardan en `data/library/`. Solo aplican en Low Poly, tipo Pixar y Plastilina.
+
 ## Cómo funciona
 
 ```

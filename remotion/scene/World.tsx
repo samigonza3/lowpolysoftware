@@ -4,6 +4,8 @@ import { Easing, interpolate } from "remotion";
 import * as THREE from "three";
 import type { Character, Palette, Scene } from "../../shared/spec";
 import { useKit } from "../kit";
+import { SkyEnvironment, useGroundTexture, useRedrawWhen } from "../assets";
+import { TEXTURE_STYLES } from "../../shared/library";
 import { CharacterModel } from "./Character";
 import { Environment, Lights, skyColor } from "./Environment";
 import { PropGroup } from "./Props";
@@ -97,7 +99,14 @@ export const World: React.FC<{
   dur: number;
   vertical: boolean;
   hook?: boolean;
-}> = ({ scene, characters, pal, style, frame, fps, dur, vertical, hook }) => {
+  assets?: Record<string, { type: string; url: string }>;
+  assetBase?: string;
+}> = ({ scene, characters, pal, style, frame, fps, dur, vertical, hook, assets, assetBase = "" }) => {
+  const textured = TEXTURE_STYLES.has(style);
+  const groundUrl = textured && scene.ground && scene.setting !== "ocean" && scene.setting !== "space" && assets?.[scene.ground] ? assetBase + assets[scene.ground].url : undefined;
+  const skyUrl = textured && scene.sky && assets?.[scene.sky] ? assetBase + assets[scene.sky].url : undefined;
+  const groundTex = useGroundTexture(groundUrl);
+  useRedrawWhen(groundTex);
   // En el gancho todo ya está en cuadro desde el frame 0 (sin animación de entrada).
   const animFrame = hook ? frame + fps : frame;
   const kit = useKit();
@@ -108,11 +117,17 @@ export const World: React.FC<{
   const night = scene.timeOfDay === "night" || style === "neon";
   return (
     <>
-      <color attach="background" args={[sky]} />
-      {kit.id !== "flat2d" && <fog attach="fog" args={[sky, 22, 60]} />}
+      {skyUrl ? (
+        <SkyEnvironment url={skyUrl} blur={style === "cartoon3d" ? 0.02 : 0.12} intensity={style === "cartoon3d" ? 0.3 : 0.22} />
+      ) : (
+        <>
+          <color attach="background" args={[sky]} />
+          {kit.id !== "flat2d" && <fog attach="fog" args={[sky, 22, 60]} />}
+        </>
+      )}
       <Lights time={scene.timeOfDay} setting={scene.setting} />
       <CameraRig move={scene.camera} frame={frame} dur={dur} vertical={vertical} focusX={focusX} />
-      <Environment setting={scene.setting} time={scene.timeOfDay} pal={pal} frame={frame} fps={fps} sceneId={scene.id} wide={wide} />
+      <Environment setting={scene.setting} time={scene.timeOfDay} pal={pal} frame={frame} fps={fps} sceneId={scene.id} wide={wide} groundTex={groundTex} />
       {scene.props.map((p, i) => (
         <PropGroup key={i} item={p} index={i} sceneId={scene.id} pal={pal} frame={animFrame} fps={fps} night={night} wide={wide} />
       ))}

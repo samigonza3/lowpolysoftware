@@ -70,6 +70,8 @@ export const SceneSchema = z.object({
   transition: z.enum(TRANSITIONS),
   characters: z.array(SceneCharacterSchema),
   props: z.array(ScenePropSchema),
+  ground: z.string().describe("id de una textura de suelo de la biblioteca, o cadena vacía para suelo liso"),
+  sky: z.string().describe("id de un cielo 360° de la biblioteca, o cadena vacía para cielo de color"),
 });
 
 export const PaletteSchema = z.object({
@@ -112,6 +114,8 @@ export interface VideoSpec extends Omit<Draft, "scenes"> {
   language: string; // es, en, pt...
   voice: VoiceChoice;
   scenes: Scene[];
+  /** URLs de texturas/cielos usados (las rellena withAssets a partir de la biblioteca). */
+  assets?: Record<string, { type: "texture" | "sky"; url: string }>;
 }
 
 /** Segundos que dura una escena: audio + respiro, o estimado por palabras. */
@@ -160,6 +164,8 @@ export function sanitizeDraft(d: Draft): Draft {
     camera: pick(CAMERAS, s.camera, "orbit"),
     emotion: pick(EMOTIONS, s.emotion, "neutral"),
     transition: pick(TRANSITIONS, s.transition, "fade"),
+    ground: String(s.ground ?? "").trim(),
+    sky: String(s.sky ?? "").trim(),
     characters: s.characters
       .filter((c) => charIds.has(c.id))
       .slice(0, 4)

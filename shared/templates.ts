@@ -100,6 +100,8 @@ export function demoSpec(style: StyleId): VideoSpec {
           { kind: style === "neon" ? "building" : "tree", count: 8, placement: "background" },
           { kind: "star", count: 3, placement: "floating" },
         ],
+        ground: "",
+        sky: "",
       },
     ],
   };

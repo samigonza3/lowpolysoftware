@@ -176,3 +176,17 @@ select.input { cursor: pointer; }
 .stills a { position: relative; display: block; border-radius: 6px; overflow: hidden; }
 .stills img { width: 100%; display: block; }
 .stills span { position: absolute; left: 4px; top: 4px; background: rgba(0,0,0,.65); color: #fff; font-size: 11px; padding: 1px 6px; border-radius: 6px; }
+
+/* referencias y biblioteca */
+.refs { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; margin-top: 10px; }
+.ref { position: relative; display: grid; gap: 6px; }
+.ref img { width: 100%; aspect-ratio: 4/3; object-fit: cover; border-radius: 10px; display: block; }
+.ref .icon-btn { position: absolute; top: 4px; right: 4px; background: rgba(0,0,0,.6); }
+.ref.add { aspect-ratio: 4/3; border: 2px dashed rgba(255,255,255,.2); border-radius: 10px; background: none; color: var(--muted);
+  font-size: 26px; display: flex; flex-direction: column; align-items: center; justify-content: center; cursor: pointer; }
+.ref.add small { font-size: 12px; }
+.ref.add.drag, .ref.add:hover { border-color: #ff8a5c; color: #fff; }
+.assets { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 8px; max-height: 300px; overflow: auto; margin-bottom: 8px; }
+.asset { display: grid; gap: 4px; font-size: 12px; padding: 6px; border-radius: 8px; background: rgba(255,255,255,.04); border: 1px solid transparent; }
+.asset.on { border-color: rgba(110,231,168,.45); }
+.asset img, .asset .noimg { width: 100%; aspect-ratio: 16/10; object-fit: cover; border-radius: 6px; background: #222; display: flex; align-items: center; justify-content: center; color: var(--muted); }

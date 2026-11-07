@@ -7,6 +7,8 @@ import type { StepProps } from "../App";
 import { api } from "../api";
 import { Preview } from "../Preview";
 import { DirectorReview } from "./DirectorReview";
+import { LibraryPanel, useInstalledLibrary } from "../LibraryPanel";
+import { TEXTURE_STYLES } from "../../shared/library";
 
 const L: Record<string, string> = {
   city: "Ciudad", forest: "Bosque", space: "Espacio", ocean: "Océano", desert: "Desierto", mountains: "Montañas", room: "Habitación",
@@ -38,6 +40,8 @@ export function StepScript({ project, update, replace, go, flush }: StepProps) {
   const [kick, setKick] = useState(0);
   const [reviewing, setReviewing] = useState(false);
   const [guide, setGuide] = useState(true);
+  const installed = useInstalledLibrary();
+  const textured = TEXTURE_STYLES.has(project.style);
   const spec = project.spec;
 
   const generate = async () => {
@@ -190,6 +194,24 @@ export function StepScript({ project, update, replace, go, flush }: StepProps) {
                       <div><label className="label">Cámara</label><Select value={s.camera} options={CAMERAS} onChange={(v) => setScene(i, { camera: v })} /></div>
                       <div><label className="label">Emoción</label><Select value={s.emotion} options={EMOTIONS} onChange={(v) => setScene(i, { emotion: v })} /></div>
                       <div><label className="label">Transición</label><Select value={s.transition} options={TRANSITIONS} onChange={(v) => setScene(i, { transition: v })} /></div>
+                      {textured && (
+                        <>
+                          <div>
+                            <label className="label">Suelo</label>
+                            <select className="input sm" value={s.ground ?? ""} onChange={(e) => setScene(i, { ground: e.target.value })}>
+                              <option value="">Liso (color)</option>
+                              {installed.filter((a) => a.type === "texture").map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
+                            </select>
+                          </div>
+                          <div>
+                            <label className="label">Cielo 360°</label>
+                            <select className="input sm" value={s.sky ?? ""} onChange={(e) => setScene(i, { sky: e.target.value })}>
+                              <option value="">Color del estilo</option>
+                              {installed.filter((a) => a.type === "sky").map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
+                            </select>
+                          </div>
+                        </>
+                      )}
                     </div>
                     <label className="label">Personajes en escena</label>
                     {spec.characters.map((c) => {
@@ -250,6 +272,7 @@ export function StepScript({ project, update, replace, go, flush }: StepProps) {
             {spec.aspect === "9:16" && (
               <label className="check"><input type="checkbox" checked={guide} onChange={(e) => setGuide(e.target.checked)} /> Mostrar lo que tapa la app</label>
             )}
+            <LibraryPanel textured={textured} />
             <DirectorReview project={project} replace={replace} flush={flush} kick={kick} onBusy={setReviewing} />
             <div className="card">
               <b>Pídele cambios al agente</b>

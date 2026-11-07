@@ -1,5 +1,6 @@
 import type { VideoSpec, VoiceChoice } from "../shared/spec";
 import type { Template } from "../shared/templates";
+import type { Asset, AssetType } from "../shared/library";
 
 export interface Project {
   id: string;
@@ -18,6 +19,7 @@ export interface Project {
   voice: VoiceChoice;
   spec: VideoSpec | null;
   renders: { file: string; createdAt: string; aspect: string }[];
+  references?: { id: string; url: string; note: string }[];
 }
 
 export interface ProjectSummary { id: string; title: string; style: string; updatedAt: string; step: number; renders: number }
@@ -85,5 +87,49 @@ export const api = {
   render: (id: string, aspect: string, quality: string) => req<Job>("POST", `/api/projects/${id}/render`, { aspect, quality }),
   job: (id: string) => req<Job>("GET", `/api/jobs/${id}`),
   review: (id: string) => req<ReviewJob>("POST", `/api/projects/${id}/review`),
+  library: () => req<Asset[]>("GET", "/api/library"),
+  installAsset: (id: string) => req<{ ok: true }>("POST", `/api/library/${id}/install`),
+  uploadAsset: (body: { type: AssetType; name: string; description: string; data: string; mime: string; filename: string }) =>
+    req<Asset>("POST", "/api/library/upload", body),
+  removeAsset: (id: string) => req<{ ok: true }>("DELETE", `/api/library/${id}`),
+  addReference: (id: string, data: string, note: string) => req<Project>("POST", `/api/projects/${id}/references`, { data, note }),
+  removeReference: (id: string, refId: string) => req<Project>("DELETE", `/api/projects/${id}/references/${refId}`),
   reviewJob: (id: string) => req<ReviewJob>("GET", `/api/review/${id}`),
+};
+
+/** Lee un archivo como base64 (sin el prefijo data:). */
+export function fileToBase64(file: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const fr = new FileReader();
+    fr.onload = () => resolve(String(fr.result).split(",")[1] ?? "");
+    fr.onerror = () => reject(fr.error);
+    fr.readAsDataURL(file);
+  });
+}
+
+/** Reduce una foto a JPG de máx. 1280 px para mandarla al agente sin gastar de más. */
+export async function shrinkImage(file: File, max = 1280): Promise<string> {
+  const url = URL.createObjectURL(file);
+  try {
+    const img = await new Promise<HTMLImageElement>((res, rej) => {
+      const i = new Image();
+      i.onload = () => res(i);
+      i.onerror = () => rej(new Error("No se pudo leer la imagen"));
+      i.src = url;
+    });
+    const k = Math.min(1, max / Math.max(img.width, img.height));
+    const c = document.createElement("canvas");
+    c.width = Math.round(img.width * k);
+    c.height = Math.round(img.height * k);
+    c.getContext("2d")!.drawImage(img, 0, 0, c.width, c.height);
+    return c.toDataURL("image/jpeg", 0.85).split(",")[1];
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
+let libraryCache: Promise<Asset[]> | null = null;
+export const loadLibrary = (fresh = false) => {
+  if (fresh || !libraryCache) libraryCache = api.library().catch((e) => ((libraryCache = null), Promise.reject(e)));
+  return libraryCache;
 };

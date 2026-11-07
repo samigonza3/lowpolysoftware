@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import type { StepProps } from "../App";
 import { api } from "../api";
+import { References } from "./References";
 
 export function StepBrief({ project, update, replace, go }: StepProps) {
   const [ideas, setIdeas] = useState<{ title: string; logline: string }[]>([]);
@@ -50,6 +51,8 @@ export function StepBrief({ project, update, replace, go }: StepProps) {
         </button>
       </div>
       {error && <div className="error">{error}</div>}
+
+      <References project={project} update={update} replace={replace} />
 
       {ideas.length > 0 && (
         <div className="ideas">

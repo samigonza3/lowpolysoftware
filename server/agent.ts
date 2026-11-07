@@ -4,6 +4,7 @@ import {
   sanitizeDraft, type Draft,
 } from "../shared/spec";
 import { templateById } from "../shared/templates";
+import { TEXTURE_STYLES, type Asset } from "../shared/library";
 import { issueText, type Issue } from "../shared/checks";
 import { generateJSON, type ImageInput } from "./llm";
 
@@ -43,6 +44,54 @@ FORMATO VERTICAL 9:16 (Reels/TikTok/Shorts):
 - Composición simple y centrada; textos en pantalla muy cortos.`;
 }
 
+/** Contexto extra: fotos de referencia del usuario y recursos instalados en la biblioteca. */
+export interface AgentContext {
+  refs?: { images: ImageInput[]; text: string };
+  library?: Asset[];
+}
+
+function referenceRules(ctx?: AgentContext) {
+  if (!ctx?.refs?.images.length) return "";
+  return `
+REFERENCIAS VISUALES DEL USUARIO (imágenes adjuntas al inicio, en este orden):
+${ctx.refs.text}
+Úsalas de verdad:
+- Personajes: toma de la foto los colores (color/accent en hex), el tipo (kind) y el accesorio más parecidos, y descríbelo en description.
+- Lugares: elige setting, timeOfDay, paleta y props que más se parezcan a la foto.
+- Objetos / productos / marca: usa el prop más parecido y lleva sus colores a la paleta.
+- Si es una persona, crea un personaje inspirado en ella (ropa, colores, accesorios), no una copia exacta.`;
+}
+
+function libraryRules(style: string, ctx?: AgentContext) {
+  const lib = (ctx?.library ?? []).filter((a) => a.installed);
+  if (!TEXTURE_STYLES.has(style)) return `
+TEXTURAS Y CIELOS 360°: este estilo no los usa; deja ground y sky como "".`;
+  const tex = lib.filter((a) => a.type === "texture");
+  const sky = lib.filter((a) => a.type === "sky");
+  if (!tex.length && !sky.length) return `
+No hay texturas ni cielos 360° instalados: deja ground y sky como "".`;
+  return `
+BIBLIOTECA (opcional; úsala cuando sume realismo y combine con el escenario, si no deja "" ):
+- Texturas de suelo (ground): ${tex.map((a) => `${a.id} (${a.description})`).join("; ") || "ninguna"}
+- Cielos 360° (sky): ${sky.map((a) => `${a.id} (${a.description})`).join("; ") || "ninguno"}
+El sky reemplaza el cielo de color: debe coincidir con timeOfDay (no uses un cielo de día en una escena de noche).
+En setting space no uses ground; en ocean no uses ground.`;
+}
+
+/** Quita ids de biblioteca que no existen o que no aplican al estilo. */
+export function fixLibrary<T extends Draft>(draft: T, style: string, library: Asset[] = []): T {
+  const ok = TEXTURE_STYLES.has(style);
+  const has = (id: string, type: string) => library.some((a) => a.id === id && a.type === type && a.installed);
+  return {
+    ...draft,
+    scenes: draft.scenes.map((s) => ({
+      ...s,
+      ground: ok && s.ground && has(s.ground, "texture") && s.setting !== "space" && s.setting !== "ocean" ? s.ground : "",
+      sky: ok && s.sky && has(s.sky, "sky") ? s.sky : "",
+    })),
+  };
+}
+
 /* ---------- 1. Sugerir ideas / temas ---------- */
 const IdeasSchema = z.object({
   ideas: z.array(z.object({ title: z.string(), logline: z.string() })),
@@ -73,11 +122,15 @@ const QuestionsSchema = z.object({
 });
 export type Questions = z.infer<typeof QuestionsSchema>;
 
-export async function askQuestions(style: string, idea: string) {
+export async function askQuestions(style: string, idea: string, ctx?: AgentContext) {
   const t = templateById(style);
   return generateJSON({
     system: BASE_SYSTEM,
+    images: ctx?.refs?.images,
     prompt: `El usuario quiere un video en estilo "${t.name}" sobre: "${idea}".
+${ctx?.refs?.images.length ? `Adjuntó fotos de referencia:
+${ctx.refs.text}
+No preguntes lo que ya se ve en ellas; pregunta cómo usarlas si no está claro.` : ""}
 Antes de escribir el guion, hazle entre 4 y 6 preguntas clave para entender qué quiere ver: público objetivo,
 duración aproximada, tono/emoción, protagonistas (quiénes son, cómo se ven), mensaje o llamado a la acción final,
 y cualquier detalle visual importante para ESTA idea. Preguntas concretas y en español, cada una con 3-4 opciones sugeridas.
@@ -100,7 +153,7 @@ export interface BriefInput {
   aspect?: string;
 }
 
-export async function buildDraft(input: BriefInput): Promise<Draft> {
+export async function buildDraft(input: BriefInput, ctx?: AgentContext): Promise<Draft> {
   const t = templateById(input.style);
   const lang = LANG_NAMES[input.language] ?? input.language;
   const qa = Object.entries(input.answers)
@@ -119,6 +172,7 @@ ritmo de ~2.5 palabras por segundo para una duración total aproximada de ${dura
 
   const draft = await generateJSON({
     system: BASE_SYSTEM,
+    images: ctx?.refs?.images,
     prompt: `Crea el guion técnico completo de un video animado.
 Estilo: ${t.name}. Dirección de arte: ${t.artDirection}
 Idea: "${input.idea}"
@@ -138,18 +192,19 @@ Reglas:
 
 ${HOOK_RULES}${formatRules(input.aspect)}
 - Si un personaje "habla" en la escena, márcalo speaking=true y usa la acción talk/point/wave; la narración en off sin personaje que hable = todos speaking=false.
-- La paleta (hex) debe sentirse propia del estilo ${t.name}; puedes partir de: ${JSON.stringify(t.palette)}.`,
+- La paleta (hex) debe sentirse propia del estilo ${t.name}; puedes partir de: ${JSON.stringify(t.palette)}.${referenceRules(ctx)}${libraryRules(t.id, ctx)}`,
     schema: DraftSchema,
     effort: "medium",
   });
-  return sanitizeDraft(draft);
+  return fixLibrary(sanitizeDraft(draft), t.id, ctx?.library);
 }
 
 /* ---------- 4. Revisión por instrucción ---------- */
-export async function reviseDraft(style: string, draft: Draft, instruction: string, language: string, aspect?: string): Promise<Draft> {
+export async function reviseDraft(style: string, draft: Draft, instruction: string, language: string, aspect?: string, ctx?: AgentContext): Promise<Draft> {
   const t = templateById(style);
   const updated = await generateJSON({
     system: BASE_SYSTEM,
+    images: ctx?.refs?.images,
     prompt: `Este es el guion técnico actual de un video estilo ${t.name} (JSON):
 ${JSON.stringify(draft)}
 
@@ -157,11 +212,11 @@ Aplica este cambio pedido por el usuario y devuelve el guion COMPLETO actualizad
 "${instruction}"
 Mantén todo lo que no se pidió cambiar. Narración en ${LANG_NAMES[language] ?? language}.
 Sigue respetando estas reglas:
-${HOOK_RULES}${formatRules(aspect)}`,
+${HOOK_RULES}${formatRules(aspect)}${referenceRules(ctx)}${libraryRules(t.id, ctx)}`,
     schema: DraftSchema,
     effort: "medium",
   });
-  return sanitizeDraft(updated);
+  return fixLibrary(sanitizeDraft(updated), t.id, ctx?.library);
 }
 
 /* ---------- 5. Revisión visual del director ---------- */
@@ -184,16 +239,21 @@ export async function reviewStoryboard(opts: {
   aspect: string;
   stills: { scene: number; image: ImageInput; label: string }[];
   lint: Issue[];
+  refs?: AgentContext["refs"];
 }): Promise<Review> {
   const t = templateById(opts.style);
   const vertical = opts.aspect === "9:16";
+  const refImgs = opts.refs?.images ?? [];
   return generateJSON({
     system: BASE_SYSTEM,
-    images: opts.stills.map((s) => s.image),
+    images: [...opts.stills.map((s) => s.image), ...refImgs],
     prompt: `Eres el director revisando el storyboard ANTES de entregar el video. Te adjunto, en orden, un fotograma por escena
 renderizado por el motor (${opts.stills.map((s, i) => `imagen ${i + 1} = ${s.label}`).join("; ")}).
 ${vertical ? "Formato 9:16: las franjas rojas punteadas marcan lo que tapa la interfaz de Reels/TikTok (arriba, abajo y la columna de botones a la derecha). Nada importante (caras, texto, objeto clave) debe quedar debajo de ellas." : `Formato ${opts.aspect}.`}
 Estilo: ${t.name}.
+${refImgs.length ? `Después de los fotogramas van ${refImgs.length} fotos de referencia del usuario:
+${opts.refs!.text}
+Comprueba que personajes, lugares y colores se parezcan a ellas (dentro de lo que el estilo permite).` : ""}
 
 Guion técnico actual (JSON):
 ${JSON.stringify(opts.draft)}

@@ -7,6 +7,9 @@ import { reviewStoryboard, reviseDraft, type Review } from "./agent";
 import { PORT } from "./paths";
 import { loadProject, projectDir, saveProject } from "./projects";
 import { browserExecutable, getBundle } from "./render";
+import { installedLibrary } from "./library";
+import { referenceInputs } from "./references";
+import { withAssets } from "../shared/library";
 
 /**
  * Revisión del director: el agente "mira" su propio storyboard antes de entregarlo.
@@ -65,7 +68,8 @@ function stillFrames(spec: VideoSpec) {
   });
 }
 
-export async function renderStills(projectId: string, spec: VideoSpec, tag: string) {
+export async function renderStills(projectId: string, rawSpec: VideoSpec, tag: string) {
+  const spec = withAssets(rawSpec, installedLibrary());
   const serveUrl = await getBundle();
   const vertical = spec.aspect === "9:16";
   const inputProps = { spec, assetBase: `http://localhost:${PORT}`, showSafeZone: vertical };
@@ -84,6 +88,7 @@ export async function renderStills(projectId: string, spec: VideoSpec, tag: stri
         serveUrl, composition, frame: frames[i], output: file, inputProps, imageFormat: "jpeg", jpegQuality: 82,
         scale: 0.5, overwrite: true, puppeteerInstance: browser, chromiumOptions: { gl: "angle" }, browserExecutable: exe,
         timeoutInMilliseconds: 120_000,
+        onBrowserLog: (l) => (l.type === "error" || l.type === "warning") && console.warn("[stills:browser]", l.text.slice(0, 300)),
       });
       out.push({ scene: i + 1, file, url: `/files/${projectId}/review/${name}` });
     }
@@ -104,6 +109,7 @@ export function startReview(projectId: string): ReviewJob {
     const p = loadProject(projectId);
     if (!p.spec) throw new Error("Aún no hay guion");
     let spec = p.spec;
+    const refs = referenceInputs(p);
     const target = p.scriptMode === "suggest" ? p.durationSec : undefined;
     let lastFixed = false;
     for (let round = 1; round <= MAX_ROUNDS; round++) {
@@ -113,7 +119,7 @@ export function startReview(projectId: string): ReviewJob {
       const stills = await renderStills(projectId, spec, `r${round}-${Date.now().toString(36)}`);
       job.stage = `Ronda ${round}: el director está mirando el storyboard`;
       const review = await reviewStoryboard({
-        style: p.style, draft: draftOf(spec), aspect: spec.aspect, lint,
+        style: p.style, draft: draftOf(spec), aspect: spec.aspect, lint, refs,
         stills: stills.map((s) => ({
           scene: s.scene,
           label: s.scene === 1 ? "escena 1 (gancho, segundo 1)" : `escena ${s.scene}`,
@@ -138,8 +144,8 @@ export function startReview(projectId: string): ReviewJob {
         ...errors.map((i) => `- ${issueText(i)}`),
         hookWeak ? `- El gancho (escena 1) sacó ${review.hookScore}/10: reescríbelo para que atrape en 3 segundos.` : "",
       ].filter(Boolean).join("\n");
-      const updated = await reviseDraft(p.style, draftOf(spec), instruction, spec.language, spec.aspect);
-      spec = { ...spec, ...updated, scenes: carryAudio(spec.scenes, updated.scenes) };
+      const updated = await reviseDraft(p.style, draftOf(spec), instruction, spec.language, spec.aspect, { refs, library: installedLibrary() });
+      spec = withAssets({ ...spec, ...updated, scenes: carryAudio(spec.scenes, updated.scenes) }, installedLibrary());
       const fresh = loadProject(projectId);
       fresh.spec = { ...spec, aspect: fresh.spec?.aspect ?? spec.aspect, captions: fresh.spec?.captions ?? spec.captions, voice: fresh.voice, language: fresh.language };
       saveProject(fresh);
