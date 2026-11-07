@@ -1,0 +1,45 @@
+{
+  "name": "estudio-ia",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Estudio local de videos animados con IA: plantillas de estilo, agente guionista, voces open source y exportación MP4.",
+  "scripts": {
+    "dev": "concurrently -k -n api,web -c cyan,magenta \"npm:dev:api\" \"npm:dev:web\"",
+    "dev:api": "tsx watch --use-system-ca --ignore ./data/** --ignore ./src/** server/index.ts",
+    "dev:web": "vite",
+    "start": "npm run build:web && tsx --use-system-ca server/index.ts",
+    "build:web": "vite build",
+    "setup:voices": "node scripts/setup-voices.mjs",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "1.6.0",
+    "@react-three/fiber": "9.2.0",
+    "@remotion/bundler": "4.0.540",
+    "@remotion/media": "4.0.540",
+    "@remotion/player": "4.0.540",
+    "@remotion/renderer": "4.0.540",
+    "@remotion/three": "4.0.540",
+    "express": "^4.21.2",
+    "mediabunny": "^1.64.0",
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
+    "remotion": "4.0.540",
+    "sherpa-onnx-node": "1.12.40",
+    "three": "0.178.0",
+    "zod": "4.6.7"
+  },
+  "devDependencies": {
+    "@types/express": "^4.17.21",
+    "@types/node": "^22.10.0",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "^19.0.0",
+    "@types/three": "0.170.0",
+    "@vitejs/plugin-react": "^4.3.4",
+    "concurrently": "^9.1.0",
+    "tsx": "^4.19.2",
+    "typescript": "5.9.3",
+    "vite": "^6.0.0"
+  }
+}
